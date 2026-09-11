@@ -94,7 +94,7 @@
   .ed-top{position:sticky;top:0;z-index:25;background:rgba(247,243,236,.94);backdrop-filter:blur(8px);
     border-bottom:1px solid var(--line);}
   .ed-top-inner{display:flex;align-items:center;gap:12px;padding:12px 16px;max-width:980px;margin:0 auto;}
-  .ed-title{font-size:15px;font-weight:600;}
+  .ed-title{font-size:15px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .ed-progress{margin-left:auto;display:flex;align-items:center;gap:10px;min-width:180px;}
   .ed-progress .bar{flex:1;}
   .ed-progress .pct{font-size:13px;font-weight:700;width:42px;text-align:right;}
@@ -145,6 +145,37 @@
     border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.12);
   }
 
+  /* Preview do modelo (como vai ficar colorido) */
+  .ref-box{
+    position:fixed; right:12px; bottom:96px; z-index:29;
+    width:118px; height:118px; border-radius:14px; overflow:hidden;
+    border:2px solid #fff; box-shadow:0 6px 22px rgba(0,0,0,.30);
+    background:#fff; cursor:pointer; transition:width .18s,height .18s; display:none;
+  }
+  .ref-box.show{display:block;}
+  .ref-box.big{ width:min(80vw,340px); height:min(80vw,340px); }
+  .ref-box canvas{ display:block; width:100%; height:100%; object-fit:contain; background:#fff; }
+  .ref-box .lbl{ position:absolute; left:0; right:0; top:0; padding:3px 0;
+    background:rgba(45,40,32,.6); color:#fff; font-size:10px; font-weight:800;
+    text-align:center; letter-spacing:.6px; pointer-events:none; }
+  .btn.active{ background:var(--rose); color:#fff; border-color:var(--rose); }
+
+  /* Armário Comprados */
+  .cab-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:10px; }
+  .cab-item{ background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:6px; text-align:center; }
+  .cab-item img{ width:100%; height:58px; object-fit:contain; image-rendering:pixelated; background:#fff; border-radius:6px; border:1px solid var(--line); }
+  .cab-item .pj{ font-size:10px; color:var(--ink); font-weight:700; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cab-item .dt{ font-size:10px; color:var(--ink-soft); line-height:1.25; margin-top:1px; }
+  #cabCount{ background:var(--rose); color:#fff; font-size:11px; border-radius:10px; padding:0 6px; margin-left:2px; }
+
+  /* Botão flutuante Comprar */
+  .buy-fab{ position:fixed; left:50%; transform:translateX(-50%); bottom:98px; z-index:29;
+    background:var(--sage); color:#fff; border:none; border-radius:26px; padding:13px 22px;
+    font-weight:800; font-size:15px; box-shadow:0 8px 24px rgba(0,0,0,.30); cursor:pointer;
+    display:none; align-items:center; gap:8px; }
+  .buy-fab.show{ display:inline-flex; }
+  .buy-fab b{ background:rgba(255,255,255,.28); border-radius:12px; padding:0 8px; }
+
   /* Modal */
   .modal-bg{position:fixed;inset:0;background:rgba(45,38,30,.45);z-index:50;display:none;
     align-items:center;justify-content:center;padding:18px;}
@@ -194,6 +225,12 @@
   @media (max-width:520px){
     .brand small{display:none;}
     .swatch{width:48px;height:48px;font-size:16px;}
+    .top-actions .btn{padding:8px 10px;font-size:13px;}
+    .top-actions .btn .icon{font-size:14px;}
+    .ed-progress{min-width:110px;}
+    .ref-box{bottom:156px;width:104px;height:104px;}
+    .buy-fab{bottom:100px;padding:12px 18px;font-size:14px;}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;}
   }
 </style>
 </head>
@@ -207,6 +244,7 @@
       <small>pintar por número</small>
     </div>
     <div class="top-actions">
+      <button class="btn ghost" id="btnCab"><span class="icon">🗄</span>Comprados<b id="cabCount">0</b></button>
       <button class="btn ghost" id="btnImport"><span class="icon">↓</span>Importar</button>
       <button class="btn ghost" id="btnExport"><span class="icon">↑</span>Exportar</button>
       <button class="btn primary" id="btnNew"><span class="icon">＋</span>Nova foto</button>
@@ -263,6 +301,7 @@
         <span class="sw"></span>
         Modo livre
       </label>
+      <button class="btn ghost active" id="btnRef" title="Ver como vai ficar"><span class="icon">👁</span>Modelo</button>
       <span style="font-size:12px;color:var(--ink-soft);" id="edHint">Toque numa região para pintar</span>
     </div>
   </div>
@@ -279,6 +318,13 @@
   <div class="palette">
     <div class="palette-inner" id="paletteInner"></div>
   </div>
+
+  <div class="ref-box" id="refBox">
+    <span class="lbl">MODELO</span>
+    <canvas id="refCanvas"></canvas>
+  </div>
+
+  <button class="buy-fab" id="buyFab">🛒 Comprar <b id="buyCount">0</b></button>
 </section>
 
 <!-- MODAL CONFIG -->
@@ -322,6 +368,46 @@
   </div>
 </div>
 
+<div class="modal-bg" id="promptBg">
+  <div class="modal">
+    <h3 class="serif">Comprar produto</h3>
+    <div class="sub" id="promptMsg">Dê um nome pro produto.</div>
+    <div class="body">
+      <input id="promptInput" type="text" maxlength="40" placeholder="Ex: Leite, Tênis, Cadeira…"
+        style="width:100%;padding:11px;border:1px solid var(--line2);border-radius:8px;background:var(--paper);color:var(--ink);font-size:15px;">
+    </div>
+    <div class="foot">
+      <button class="btn ghost" id="promptNo">Cancelar</button>
+      <button class="btn primary" id="promptYes">Comprar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="cabBg">
+  <div class="modal" style="max-width:600px;">
+    <h3 class="serif">🗄 Comprados</h3>
+    <div class="sub" id="cabSub">0 itens</div>
+    <div class="body" style="max-height:62vh;overflow:auto;">
+      <div id="cabGrid" class="cab-grid"></div>
+    </div>
+    <div class="foot">
+      <button class="btn danger" id="cabClear">Limpar tudo</button>
+      <button class="btn primary" id="cabClose" style="flex:1;justify-content:center;">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="confirmBg">
+  <div class="modal">
+    <h3 class="serif" id="confirmTitle">Confirmar</h3>
+    <div class="sub" id="confirmMsg" style="margin-bottom:4px;"></div>
+    <div class="foot">
+      <button class="btn ghost" id="confirmNo">Cancelar</button>
+      <button class="btn danger" id="confirmYes">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <input type="file" id="fileInput" accept="image/*">
@@ -336,15 +422,19 @@
    ============================================================ */
 const DB_NAME = "atelier_pintar_db";
 const STORE = "projetos";
+const COMPRAS = "comprados";
 let _db = null;
 
 function openDB(){
   return new Promise((res,rej)=>{
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = e=>{
       const db = e.target.result;
       if(!db.objectStoreNames.contains(STORE)){
         db.createObjectStore(STORE, {keyPath:"id"});
+      }
+      if(!db.objectStoreNames.contains(COMPRAS)){
+        db.createObjectStore(COMPRAS, {keyPath:"id"});
       }
     };
     req.onsuccess = e=>{ _db = e.target.result; res(_db); };
@@ -378,6 +468,28 @@ function idbDel(id){
     tx.onsuccess=()=>res();
     tx.onerror=e=>rej(e.target.error);
   });
+}
+
+/* ---- depósito COMPRADOS (recortes das regiões pintadas) ---- */
+function compraAdd(obj){ return new Promise((res,rej)=>{ const tx=_db.transaction(COMPRAS,"readwrite").objectStore(COMPRAS).put(obj); tx.onsuccess=()=>res(); tx.onerror=e=>rej(e.target.error);});}
+function compraAll(){ return new Promise((res,rej)=>{ const tx=_db.transaction(COMPRAS,"readonly").objectStore(COMPRAS).getAll(); tx.onsuccess=()=>res(tx.result||[]); tx.onerror=e=>rej(e.target.error);});}
+function compraClear(){ return new Promise((res,rej)=>{ const tx=_db.transaction(COMPRAS,"readwrite").objectStore(COMPRAS).clear(); tx.onsuccess=()=>res(); tx.onerror=e=>rej(e.target.error);});}
+
+// recorta a região r (só os pixels dela, fundo transparente) -> thumb dataURL
+function makeCutout(art, r){
+  const off=art.pixOffsets, idx=art.pixIdx, W=art.W, src=art.origData;
+  let minx=1e9,miny=1e9,maxx=-1,maxy=-1;
+  for(let p=off[r];p<off[r+1];p++){ const ix=idx[p], x=ix%W, y=(ix/W)|0; if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
+  if(maxx<0) return "";
+  const bw=maxx-minx+1, bh=maxy-miny+1;
+  const cut=document.createElement("canvas"); cut.width=bw; cut.height=bh;
+  const cx=cut.getContext("2d"); const im=cx.createImageData(bw,bh); const d=im.data;
+  for(let p=off[r];p<off[r+1];p++){ const ix=idx[p], x=ix%W, y=(ix/W)|0; const o=((y-miny)*bw+(x-minx))*4, so=ix*4; d[o]=src[so]; d[o+1]=src[so+1]; d[o+2]=src[so+2]; d[o+3]=255; }
+  cx.putImageData(im,0,0);
+  const s=Math.min(1, 72/Math.max(bw,bh)); const tw=Math.max(1,Math.round(bw*s)), th=Math.max(1,Math.round(bh*s));
+  const t=document.createElement("canvas"); t.width=tw; t.height=th; const tc=t.getContext("2d");
+  tc.imageSmoothingEnabled=false; tc.drawImage(cut,0,0,tw,th);
+  return t.toDataURL("image/png");
 }
 
 /* ============================================================
@@ -544,6 +656,30 @@ function mergeSmall(region, count, q, W, H, minA){
   return {region:finalRegion, N, color:finalColor};
 }
 
+// Ordena as cores usadas em cadeia (vizinho mais próximo em cor), começando pela mais escura.
+// Assim o número 1 fica perto do 2 EM COR -> cores parecidas = números vizinhos.
+function orderPaletteIdx(idxList, pal){
+  const idx=idxList.slice();
+  if(idx.length<=2) return idx;
+  const used=new Array(idx.length).fill(false);
+  let start=0, bl=1e9;
+  idx.forEach((ci,i)=>{ const c=pal[ci], l=luma(c[0],c[1],c[2]); if(l<bl){bl=l;start=i;} });
+  const order=[idx[start]]; used[start]=true;
+  for(let k=1;k<idx.length;k++){
+    const last=pal[order[order.length-1]];
+    let bi=-1,bd=1e18;
+    for(let i=0;i<idx.length;i++){
+      if(used[i]) continue;
+      const c=pal[idx[i]];
+      const dr=c[0]-last[0],dg=c[1]-last[1],db=c[2]-last[2];
+      const d=0.5*dr*dr+0.9*dg*dg+0.3*db*db;
+      if(d<bd){bd=d;bi=i;}
+    }
+    order.push(idx[bi]); used[bi]=true;
+  }
+  return order;
+}
+
 // Pipeline completo -> estrutura usada na pintura
 async function generatePainting(procCanvas, colors, detail, onPhase){
   const W=procCanvas.width, H=procCanvas.height;
@@ -569,7 +705,7 @@ async function generatePainting(procCanvas, colors, detail, onPhase){
   const lab=labelRegions(q, W, H);
 
   onPhase && onPhase("Refinando regiões…"); await yield_();
-  const minA = Math.max(18, Math.round(total * lerp(0.0042, 0.00045, (detail-1)/9)));
+  const minA = Math.max(60, Math.round(total * lerp(0.010, 0.0012, (detail-1)/9)));
   const fin=mergeSmall(lab.region, lab.count, q, W, H, minA);
 
   onPhase && onPhase("Numerando…"); await yield_();
@@ -599,10 +735,10 @@ async function generatePainting(procCanvas, colors, detail, onPhase){
     labX[r]=best%W; labY[r]=(best/W)|0;
   }
 
-  // cores usadas + numeração (1..M por luminância, paleta já ordenada)
+  // cores usadas -> ordena em cadeia -> numera 1..M (acoplado por cor)
   const usedSet=new Set();
   for(let r=0;r<N;r++) usedSet.add(regColor[r]);
-  const usedColors=[...usedSet].sort((a,b)=>a-b);
+  const usedColors=orderPaletteIdx([...usedSet], pal);
   const numberOfColor=new Map();
   usedColors.forEach((c,i)=>numberOfColor.set(c,i+1));
   const regionNumber=new Int32Array(N);
@@ -614,7 +750,7 @@ async function generatePainting(procCanvas, colors, detail, onPhase){
   for(let i=0;i<total;i++){
     const o=i*4;
     const gv = luma(origData[o],origData[o+1],origData[o+2]);
-    const v = Math.round(gv*0.38 + 255*0.62); // cinza bem claro = esboço
+    const v = Math.round(gv*0.92 + 8); // PRETO E BRANCO de verdade (vê o desenho), só levemente clareado p/ ler o número
     grayBase[o]=v; grayBase[o+1]=v; grayBase[o+2]=v; grayBase[o+3]=255;
   }
   // contornos das regiões em cinza médio (some quando a região é pintada)
@@ -624,7 +760,7 @@ async function generatePainting(procCanvas, colors, detail, onPhase){
     else if(x>0 && region[i-1]!==r) edge=true;
     else if(y<H-1 && region[i+W]!==r) edge=true;
     else if(y>0 && region[i-W]!==r) edge=true;
-    if(edge){ const o=i*4; grayBase[o]=110;grayBase[o+1]=110;grayBase[o+2]=110; }
+    if(edge){ const o=i*4; const d=Math.round(grayBase[o]*0.5); grayBase[o]=d;grayBase[o+1]=d;grayBase[o+2]=d; }
   }
 
   return {
@@ -666,6 +802,9 @@ const els = {
   loadingText:document.getElementById("loadingText"),
   toast:document.getElementById("toast"),
   doneOverlay:document.getElementById("doneOverlay"),
+  refBox:document.getElementById("refBox"),
+  refCanvas:document.getElementById("refCanvas"),
+  btnRef:document.getElementById("btnRef"),
 };
 
 let current = null; // {id, name, done, colors, detail, art:{...}, painted:Uint8Array, paintedCount, paintedArea, totalArea}
@@ -680,6 +819,42 @@ let toastT=null;
 function toast(msg){
   els.toast.textContent=msg; els.toast.classList.add("show");
   clearTimeout(toastT); toastT=setTimeout(()=>els.toast.classList.remove("show"),1600);
+}
+
+/* popup de confirmação próprio (o confirm() do navegador é bloqueado em webview) */
+function confirmDialog(msg, yesLabel="Confirmar", danger=true){
+  return new Promise(res=>{
+    const bg=document.getElementById("confirmBg");
+    document.getElementById("confirmMsg").textContent=msg;
+    const yes=document.getElementById("confirmYes"), no=document.getElementById("confirmNo");
+    yes.textContent=yesLabel;
+    yes.className = danger ? "btn danger" : "btn primary";
+    bg.classList.add("show");
+    const done=(v)=>{ bg.classList.remove("show");
+      yes.removeEventListener("click",oy); no.removeEventListener("click",on); bg.removeEventListener("click",ob);
+      res(v); };
+    const oy=()=>done(true), on=()=>done(false), ob=(e)=>{ if(e.target===bg) done(false); };
+    yes.addEventListener("click",oy); no.addEventListener("click",on); bg.addEventListener("click",ob);
+  });
+}
+
+/* popup com campo de texto (nome do produto) */
+function promptDialog(msg, def=""){
+  return new Promise(res=>{
+    const bg=document.getElementById("promptBg");
+    document.getElementById("promptMsg").textContent=msg;
+    const inp=document.getElementById("promptInput"); inp.value=def;
+    const yes=document.getElementById("promptYes"), no=document.getElementById("promptNo");
+    bg.classList.add("show"); setTimeout(()=>inp.focus(),60);
+    const done=(v)=>{ bg.classList.remove("show");
+      yes.removeEventListener("click",oy); no.removeEventListener("click",on);
+      bg.removeEventListener("click",ob); inp.removeEventListener("keydown",ok); res(v); };
+    const oy=()=>done(inp.value.trim()), on=()=>done(null),
+      ob=(e)=>{ if(e.target===bg) done(null); },
+      ok=(e)=>{ if(e.key==="Enter") done(inp.value.trim()); };
+    yes.addEventListener("click",oy); no.addEventListener("click",on);
+    bg.addEventListener("click",ob); inp.addEventListener("keydown",ok);
+  });
 }
 
 /* ---------- GALERIA ---------- */
@@ -734,7 +909,7 @@ function bindCards(){
     el.addEventListener("click", async (e)=>{
       e.stopPropagation();
       const id=el.getAttribute("data-del");
-      if(confirm("Excluir esta pintura? Não dá pra desfazer.")){
+      if(await confirmDialog("Excluir esta pintura? Não dá pra desfazer.","Excluir")){
         await idbDel(id); renderGallery(); toast("Excluída");
       }
     });
@@ -743,7 +918,7 @@ function bindCards(){
     el.addEventListener("click", async (e)=>{
       e.stopPropagation();
       const id=el.getAttribute("data-repaint");
-      if(confirm("Recomeçar esta pintura do zero?")){
+      if(await confirmDialog("Recomeçar esta pintura do zero?","Recomeçar",false)){
         const p=await idbGet(id);
         p.filled=[]; p.done=false; p.percent=0; p.updatedAt=Date.now();
         await idbPut(p); openProject(id);
@@ -880,6 +1055,10 @@ function enterEditor(project, art){
 
   // paleta
   buildPalette();
+  buildReference();
+  els.refBox.classList.add("show"); els.refBox.classList.remove("big");
+  els.btnRef.classList.add("active");
+  pendingRegions=[]; updateBuyFab();
   selectedColorIdx = current.art.usedColors.length ? current.art.usedColors[0] : null;
   highlightSwatch();
 
@@ -897,6 +1076,7 @@ function enterEditor(project, art){
 
 function exitEditor(saveFirst=true){
   if(saveFirst && current) saveProgress(true);
+  els.refBox.classList.remove("show","big");
   els.editor.classList.remove("show");
   els.gallery.style.display="block";
   current=null; selectedColorIdx=null;
@@ -942,7 +1122,7 @@ function updateRemaining(){
   });
 }
 
-/* preenche uma região no fillData */
+/* preenche uma região no fillData — revela a COR REAL da foto (fica igual a foto) */
 function applyFill(r, count=true){
   const art=current.art;
   const fd=fillData.data, src=art.origData;
@@ -1015,7 +1195,7 @@ function drawNumbers(){
   ctx.textAlign="center"; ctx.textBaseline="middle";
   for(let r=0;r<art.N;r++){
     if(current.painted[r]) continue;
-    if(art.area[r]<16) continue;
+    if(art.area[r]<10) continue;
     const px=ox + (art.labX[r]+0.5)*sx;
     const py=oy + (art.labY[r]+0.5)*sy;
     if(px<-12||px>vw+12||py<-12||py>vh+12) continue; // fora da tela
@@ -1032,6 +1212,78 @@ function drawNumbers(){
   }
 }
 
+/* ---------- MODELO (preview colorido de como vai ficar) ---------- */
+function buildReference(){
+  const art=current.art;
+  els.refCanvas.width=art.W; els.refCanvas.height=art.H;
+  const rc=els.refCanvas.getContext("2d");
+  const img=rc.createImageData(art.W, art.H);
+  img.data.set(art.origData);   // foto real = como vai ficar
+  rc.putImageData(img,0,0);
+}
+els.btnRef.addEventListener("click",()=>{
+  const on=els.refBox.classList.toggle("show");
+  els.btnRef.classList.toggle("active", on);
+  if(!on) els.refBox.classList.remove("big");
+});
+els.refBox.addEventListener("click",()=>els.refBox.classList.toggle("big"));
+
+/* ---------- ARMÁRIO: COMPRADOS (recorte da região pintada) ---------- */
+function fmtDT(t){ const d=new Date(t); return d.toLocaleDateString("pt-BR")+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }
+
+// recorta um CONJUNTO de regiões (o produto que você montou) -> thumb
+function makeCutoutRegions(art, regs){
+  const off=art.pixOffsets, idx=art.pixIdx, W=art.W, src=art.origData;
+  let minx=1e9,miny=1e9,maxx=-1,maxy=-1;
+  for(const r of regs) for(let p=off[r];p<off[r+1];p++){ const ix=idx[p],x=ix%W,y=(ix/W)|0; if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y; }
+  if(maxx<0) return "";
+  const bw=maxx-minx+1, bh=maxy-miny+1;
+  const cut=document.createElement("canvas"); cut.width=bw; cut.height=bh;
+  const cx=cut.getContext("2d"); const im=cx.createImageData(bw,bh); const d=im.data;
+  for(const r of regs) for(let p=off[r];p<off[r+1];p++){ const ix=idx[p],x=ix%W,y=(ix/W)|0; const o=((y-miny)*bw+(x-minx))*4, so=ix*4; d[o]=src[so];d[o+1]=src[so+1];d[o+2]=src[so+2];d[o+3]=255; }
+  cx.putImageData(im,0,0);
+  const s=Math.min(1, 120/Math.max(bw,bh)); const tw=Math.max(1,Math.round(bw*s)), th=Math.max(1,Math.round(bh*s));
+  const t=document.createElement("canvas"); t.width=tw; t.height=th; const tc=t.getContext("2d");
+  tc.imageSmoothingEnabled=false; tc.drawImage(cut,0,0,tw,th);
+  return t.toDataURL("image/png");
+}
+
+// PRODUTO EM MONTAGEM: as regiões que você pintou e ainda não "comprou"
+let pendingRegions=[];
+function updateBuyFab(){
+  const b=document.getElementById("buyFab"); if(!b) return;
+  document.getElementById("buyCount").textContent=pendingRegions.length;
+  b.classList.toggle("show", pendingRegions.length>0);
+}
+async function buyProduct(){
+  if(!current || !pendingRegions.length) return;
+  const name=await promptDialog(pendingRegions.length+" parte(s) selecionada(s). Nome do produto?","");
+  if(name===null) return; // cancelou -> mantém a seleção
+  const art=current.art; const now=Date.now();
+  const entry={ id:"c_"+current.id+"_"+now+"_"+Math.floor(Math.random()*1e4), t:now,
+    proj:current.name, projId:current.id, nome:name||"Produto",
+    thumb:makeCutoutRegions(art, pendingRegions.slice()) };
+  try{ await compraAdd(entry); }catch(e){ console.warn(e); }
+  updateComprasCount();
+  pendingRegions=[]; updateBuyFab();
+  toast(entry.nome+" comprado!");
+}
+async function updateComprasCount(){
+  try{ const list=await compraAll(); const el=document.getElementById("cabCount"); if(el) el.textContent=list.length; }catch(e){}
+}
+async function openCabinet(){
+  const list=await compraAll(); list.sort((a,b)=>b.t-a.t);
+  document.getElementById("cabSub").textContent=list.length+" item(ns) comprado(s), mais recentes primeiro";
+  document.getElementById("cabGrid").innerHTML = list.length ? list.map(c=>`
+    <div class="cab-item">
+      <img src="${c.thumb}" alt="">
+      <div class="pj">${escapeAttr(c.nome||c.proj||"Produto")}</div>
+      <div class="dt">${escapeAttr(c.proj||"")}</div>
+      <div class="dt">${fmtDT(c.t)}</div>
+    </div>`).join("") : '<div class="empty" style="grid-column:1/-1;">Nada comprado ainda. Pinte as partes de um produto e toque em 🛒 Comprar!</div>';
+  document.getElementById("cabBg").classList.add("show");
+}
+
 /* pintar uma região */
 let wrongFlash=null;
 function tryPaintRegion(r){
@@ -1045,7 +1297,7 @@ function tryPaintRegion(r){
     updateProgressUI();
     updateRemaining();
     render();
-    const pct=updateProgressUI();
+    pendingRegions.push(r); updateBuyFab();
     if(current.paintedCount===art.N) onComplete();
     saveProgressDebounced();
   }else{
@@ -1155,14 +1407,15 @@ async function saveProgress(immediate){
 /* ---------- EXPORTAR / IMPORTAR JSON ---------- */
 document.getElementById("btnExport").addEventListener("click", async ()=>{
   const all=await idbAll();
-  if(!all.length){ toast("Nada para exportar"); return; }
-  const blob=new Blob([JSON.stringify({app:"atelier-pintar",version:1,projetos:all},null,0)],{type:"application/json"});
+  const compras=await compraAll();
+  if(!all.length && !compras.length){ toast("Nada para exportar"); return; }
+  const blob=new Blob([JSON.stringify({app:"atelier-pintar",version:2,projetos:all,comprados:compras},null,0)],{type:"application/json"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
   const d=new Date(); const stamp=d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
   a.href=url; a.download=`atelier_backup_${stamp}.json`; a.click();
   URL.revokeObjectURL(url);
-  toast(`Exportado: ${all.length} pintura(s)`);
+  toast(`Exportado: ${all.length} pintura(s) + ${compras.length} compra(s)`);
 });
 function pad(n){ return String(n).padStart(2,"0"); }
 
@@ -1176,22 +1429,36 @@ document.getElementById("importInput").addEventListener("change", e=>{
       const obj=JSON.parse(reader.result);
       const list=obj.projetos||obj.projects||(Array.isArray(obj)?obj:null);
       if(!Array.isArray(list)) throw new Error("formato");
-      if(!confirm(`Importar ${list.length} pintura(s)? Itens com o mesmo id serão substituídos.`)) return;
+      if(!(await confirmDialog(`Importar ${list.length} pintura(s)? Itens com o mesmo id serão substituídos.`,"Importar",false))) return;
       let ok=0;
       for(const p of list){
         if(p && p.id && p.processedPNG){ await idbPut(p); ok++; }
       }
-      renderGallery();
-      toast(`Importado: ${ok} pintura(s)`);
+      const compras=obj.comprados||[]; let okc=0;
+      for(const c of compras){ if(c && c.id){ await compraAdd(c); okc++; } }
+      renderGallery(); updateComprasCount();
+      toast(`Importado: ${ok} pintura(s) + ${okc} compra(s)`);
     }catch(err){ console.error(err); toast("Arquivo inválido"); }
   };
   reader.readAsText(file);
 });
 
 /* ---------- INIT ---------- */
+
+document.getElementById("buyFab").addEventListener("click",buyProduct);
+document.getElementById("btnCab").addEventListener("click",openCabinet);
+document.getElementById("cabClose").addEventListener("click",()=>document.getElementById("cabBg").classList.remove("show"));
+document.getElementById("cabBg").addEventListener("click",e=>{ if(e.target.id==="cabBg") document.getElementById("cabBg").classList.remove("show"); });
+document.getElementById("cabClear").addEventListener("click", async ()=>{
+  if(await confirmDialog("Limpar todo o armário de comprados?","Limpar")){
+    await compraClear(); await updateComprasCount(); openCabinet(); toast("Armário limpo");
+  }
+});
+
 (async function init(){
   try{ await openDB(); }catch(e){ alert("Seu navegador bloqueou o armazenamento local."); }
   await renderGallery();
+  updateComprasCount();
 })();
 </script>
 </body>
